@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>HELIOS RELAY</title>
+<style>
+  :root {
+    --canvas: #171310;
+    --surface: #241c16;
+    --sand: #c8a06a;
+    --rust: #b4552d;
+    --ink: #f2e8d8;
+    --muted: #9a8a76;
+    --vanguard: #e2543e;
+    --sentinel: #3fa796;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--canvas); color: var(--ink);
+    font-family: system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
+  #game { position: fixed; inset: 0; }
+  #game canvas { display: block; width: 100%; height: 100%; }
+  .num, #timer, #score, #health-num, #money, #ammo, #spike-timer, #round-num {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  [hidden] { display: none !important; }
+
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px;
+    transform: translate(-50%, -50%); }
+  #crosshair .tick { position: absolute; background: var(--ink); }
+  #crosshair .tick.t { left: 11px; top: 0; width: 2px; height: 7px; }
+  #crosshair .tick.b { left: 11px; bottom: 0; width: 2px; height: 7px; }
+  #crosshair .tick.l { left: 0; top: 11px; width: 7px; height: 2px; }
+  #crosshair .tick.r { right: 0; top: 11px; width: 7px; height: 2px; }
+  #crosshair .dot { position: absolute; left: 11px; top: 11px; width: 2px; height: 2px; background: var(--ink); }
+  #hitmarker { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px;
+    transform: translate(-50%, -50%) rotate(45deg); opacity: 0; }
+  #hitmarker::before, #hitmarker::after { content: ""; position: absolute; background: var(--sand); }
+  #hitmarker::before { left: 13px; top: 0; width: 2px; height: 28px; }
+  #hitmarker::after { left: 0; top: 13px; width: 28px; height: 2px; }
+  #hitmarker.show { opacity: 1; }
+  #hitmarker.kill::before, #hitmarker.kill::after { background: var(--vanguard); }
+
+  #topbar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 18px; background: rgba(23, 19, 16, .72);
+    border: 1px solid var(--rust); padding: 6px 16px; border-radius: 4px; }
+  #timer { font-size: 20px; color: var(--sand); }
+  #score { display: flex; gap: 10px; font-size: 20px; }
+  #score-van { color: var(--vanguard); }
+  #score-sen { color: var(--sentinel); }
+  #round-num { font-size: 13px; color: var(--muted); }
+
+  #alive { position: absolute; top: 14px; right: 16px; text-align: right; font-size: 13px; }
+  #alive-van, #alive-sen { display: flex; gap: 4px; justify-content: flex-end; margin: 3px 0; }
+  #alive-van .pip, #alive-sen .pip { width: 9px; height: 9px; border-radius: 50%; }
+  #alive-van .pip { background: var(--vanguard); }
+  #alive-sen .pip { background: var(--sentinel); }
+  #alive-van .pip.dead, #alive-sen .pip.dead { background: transparent; border: 1px solid var(--muted); }
+  #killfeed { position: absolute; top: 76px; right: 16px; text-align: right; font-size: 13px;
+    color: var(--muted); line-height: 1.7; }
+  #killfeed b { color: var(--ink); }
+
+  #health-wrap { position: absolute; left: 16px; bottom: 16px; }
+  #health-num { font-size: 34px; color: var(--ink); }
+  #health-bar { width: 220px; height: 8px; background: var(--surface); border: 1px solid var(--muted);
+    margin: 4px 0 6px; }
+  #health-fill { height: 100%; width: 100%; background: var(--sand); }
+  #health-fill.low { background: var(--vanguard); }
+  #armor-pips { display: flex; gap: 4px; margin-bottom: 6px; }
+  #armor-pips .pip { width: 22px; height: 6px; background: var(--sentinel); }
+  #armor-pips .pip.off { background: var(--surface); border: 1px solid var(--muted); }
+  #money { font-size: 16px; color: var(--sand); }
+
+  #ammo { position: absolute; right: 20px; bottom: 16px; text-align: right; }
+  #ammo-mag { font-size: 34px; }
+  #ammo-reserve { font-size: 16px; color: var(--muted); }
+  #weapon-name { font-size: 13px; color: var(--sand); letter-spacing: 2px; margin-top: 2px; }
+
+  #spike-status { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+    text-align: center; font-size: 13px; color: var(--rust); }
+  #spike-timer { font-size: 18px; color: var(--ink); }
+  #spike-bar { width: 160px; height: 5px; background: var(--surface); margin: 4px auto 0; }
+  #spike-bar .fill { height: 100%; width: 0; background: var(--rust); }
+
+  #plant-ring { position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%);
+    width: 72px; height: 72px; }
+  #plant-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  #plant-ring .ring-bg { fill: none; stroke: var(--surface); stroke-width: 6; }
+  #plant-ring .ring-fg { fill: none; stroke: var(--sand); stroke-width: 6; stroke-linecap: round;
+    stroke-dasharray: 188.5; stroke-dashoffset: 188.5; }
+  #plant-ring .ring-label { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 12px; letter-spacing: 1px; }
+
+  #hint { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%);
+    font-size: 14px; color: var(--sand); text-shadow: 0 1px 3px #000; }
+
+  #banner { position: absolute; left: 50%; top: 26%; transform: translateX(-50%);
+    text-align: center; }
+  #banner-title { font-size: 44px; letter-spacing: 8px; color: var(--ink);
+    text-shadow: 0 2px 12px rgba(0, 0, 0, .8); }
+  #banner-sub { font-size: 15px; color: var(--sand); margin-top: 6px; }
+
+  #vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(226, 84, 62, .45) 100%); }
+  #vignette.show { opacity: 1; }
+  #scope-overlay { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(circle at center, transparent 34%, rgba(0, 0, 0, .94) 36%); }
+  #scope-overlay::before, #scope-overlay::after { content: ""; position: absolute; background: #000; }
+  #scope-overlay::before { left: 50%; top: 0; bottom: 0; width: 1px; }
+  #scope-overlay::after { top: 50%; left: 0; right: 0; height: 1px; }
+
+  #buy-menu { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 560px; max-width: 92vw; background: var(--surface); border: 1px solid var(--rust);
+    padding: 18px 20px; pointer-events: auto; }
+  #buy-menu h2 { font-size: 18px; letter-spacing: 3px; color: var(--sand); margin-bottom: 4px; }
+  #buy-money { font-size: 15px; color: var(--ink); margin-bottom: 12px; }
+  #buy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #buy-grid .item { border: 1px solid var(--muted); padding: 8px 10px; font-size: 14px; cursor: pointer; }
+  #buy-grid .item:hover { border-color: var(--sand); }
+  #buy-grid .item .price { float: right; color: var(--sand); }
+  #buy-grid .item .key { color: var(--muted); margin-right: 6px; }
+  #buy-menu .close-hint { margin-top: 12px; font-size: 12px; color: var(--muted); }
+
+  #overlay { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center;
+    justify-content: center; background: rgba(23, 19, 16, .86); }
+  #overlay .panel { text-align: center; max-width: 560px; padding: 24px; }
+  #overlay-title { font-size: 52px; letter-spacing: 10px; color: var(--sand); }
+  #overlay-copy { margin: 14px 0 20px; font-size: 15px; line-height: 1.6; color: var(--ink); }
+  #play { pointer-events: auto; cursor: pointer; font-size: 17px; letter-spacing: 3px;
+    padding: 12px 42px; background: var(--rust); color: var(--ink); border: none; }
+  #play:hover { background: var(--vanguard); }
+  #overlay .controls { margin-top: 22px; font-size: 13px; color: var(--muted); line-height: 1.9;
+    list-style: none; text-align: left; display: inline-block; }
+  #overlay .controls b { color: var(--ink); }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="game"></div>
+<div id="hud">
+  <div id="crosshair"><span class="tick t"></span><span class="tick b"></span><span class="tick l"></span><span class="tick r"></span><span class="dot"></span></div>
+  <div id="hitmarker"></div>
+  <div id="topbar">
+    <span id="timer">1:40</span>
+    <span id="score"><span id="score-van">0</span><span>:</span><span id="score-sen">0</span></span>
+    <span id="round-num">ROUND 1</span>
+  </div>
+  <div id="alive">
+    <div id="alive-van"></div>
+    <div id="alive-sen"></div>
+  </div>
+  <div id="killfeed"></div>
+  <div id="health-wrap">
+    <span id="health-num">100</span>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="armor-pips"></div>
+    <span id="money">$800</span>
+  </div>
+  <div id="ammo">
+    <span id="ammo-mag">25</span><span id="ammo-reserve"> / 75</span>
+    <div id="weapon-name">VANDAL</div>
+  </div>
+  <div id="spike-status"><span id="spike-timer"></span><div id="spike-bar"><div class="fill"></div></div></div>
+  <div id="plant-ring" hidden>
+    <svg viewBox="0 0 72 72"><circle class="ring-bg" cx="36" cy="36" r="30"></circle><circle class="ring-fg" cx="36" cy="36" r="30"></circle></svg>
+    <span class="ring-label">PLANTING</span>
+  </div>
+  <div id="hint">Press B to buy</div>
+  <div id="banner" hidden><div id="banner-title"></div><div id="banner-sub"></div></div>
+  <div id="vignette"></div>
+  <div id="scope-overlay" hidden></div>
+  <div id="buy-menu" hidden>
+    <h2>BUY MENU</h2>
+    <div id="buy-money">$800</div>
+    <div id="buy-grid"></div>
+    <div class="close-hint">Press B or Esc to close</div>
+  </div>
+</div>
+<div id="overlay">
+  <div class="panel">
+    <h1 id="overlay-title">HELIOS RELAY</h1>
+    <p id="overlay-copy">A complete round-based tactical FPS: plant the spike, buy, outplay the bots.</p>
+    <button id="play">PLAY</button>
+    <ul class="controls">
+      <li><b>WASD</b> move &nbsp; <b>Mouse</b> look &nbsp; <b>Click</b> fire</li>
+      <li><b>R</b> reload &nbsp; <b>Ctrl / C</b> crouch &nbsp; <b>Space</b> jump / vault</li>
+      <li><b>B</b> buy menu &nbsp; <b>E</b> plant / defuse &nbsp; <b>G</b> grenade &nbsp; <b>1–4</b> weapons</li>
+    </ul>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
